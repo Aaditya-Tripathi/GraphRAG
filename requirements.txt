@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+streamlit
+neo4j
+neo4j-graphrag
+sentence-transformers
+groq
+python-dotenv
+pydantic-settings
+python-multipart
+pypdf
+langchain-text-splitters
+httpx
+pytest
