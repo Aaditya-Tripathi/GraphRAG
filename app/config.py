@@ -29,3 +29,4 @@ NEO4J_DATABASE = require_environment_variable("NEO4J_DATABASE")
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_DIMENSION = 384
+VECTOR_INDEX_NAME = "chunk_embedding_index"
