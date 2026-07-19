@@ -26,3 +26,6 @@ NEO4J_URI = require_environment_variable("NEO4J_URI")
 NEO4J_USERNAME = require_environment_variable("NEO4J_USERNAME")
 NEO4J_PASSWORD = require_environment_variable("NEO4J_PASSWORD")
 NEO4J_DATABASE = require_environment_variable("NEO4J_DATABASE")
+
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_DIMENSION = 384
