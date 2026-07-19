@@ -1,0 +1,19 @@
+﻿Knowledge Graph RAG combines semantic search with structured graph information. A semantic search system finds passages whose meaning is similar to the user's question. A knowledge graph stores entities and relationships between those entities.
+
+Neo4j is a graph database. Information in Neo4j can be represented using nodes, relationships, labels, and properties. In this project, conversations, documents, chunks, and entities will be represented as nodes.
+
+Each document will be divided into smaller chunks. Every chunk will receive a numerical embedding. The embedding represents the semantic meaning of the chunk and allows the application to find relevant information using similarity search.
+
+Chunks from the same document will be connected using NEXT_CHUNK relationships. This makes it possible to find surrounding information when a relevant chunk is retrieved.
+
+Entities mentioned inside chunks will also be extracted. For example, a chunk mentioning Neo4j and vector search may produce Entity nodes for Neo4j and Vector Search. The chunk will be connected to those entities using MENTIONS relationships.
+
+Relationships between entities will be stored using a controlled RELATED_TO relationship. The actual relationship description, such as SUPPORTS or USES, will be stored as a relationship property.
+
+Every document, chunk, entity, and extracted relationship will belong to a conversation. The conversation identifier will prevent information from separate conversations from being mixed during retrieval.
+
+When the user asks a question, the application will generate an embedding for the question. Neo4j will compare the question embedding with stored chunk embeddings and return up to five relevant chunks.
+
+The application will then traverse the graph around those chunks. It will collect mentioned entities and connected facts before sending the retrieved evidence to the language model.
+
+The final response will include the generated answer, supporting chunks, similarity scores, and graph facts. This allows the user to inspect the evidence behind the answer.
