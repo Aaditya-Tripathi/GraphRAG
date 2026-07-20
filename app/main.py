@@ -20,9 +20,7 @@ from app.api_schemas import (
     TextIngestResponse,
 )
 from app.config import GROQ_MODEL, OPENROUTER_MODEL
-from app.constants import (
-    EMBEDDING_MODEL,
-)
+from app.constants import EMBEDDING_MODEL
 from app.database import close_driver, verify_connection
 from app.ingestion import delete_document, ingest_text
 from app.knowledge_graph import (
@@ -97,7 +95,7 @@ def model_error_detail(
 def model_http_exception(
     error: LLMServiceError,
 ) -> HTTPException:
-    """Map a Groq failure to the appropriate HTTP response."""
+    """Map an LLM provider failure to an HTTP response."""
 
     if error.code == "rate_limit":
         headers = None
@@ -147,7 +145,7 @@ app = FastAPI(
     description=(
         "Conversation-isolated GraphRAG using "
         "Neo4j vector retrieval, graph traversal, "
-        "and Groq."
+        "and selectable LLM providers."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -242,7 +240,7 @@ def health_check() -> dict:
     """
     Verify that the API and Neo4j connection are working.
 
-    This endpoint does not call Groq, so it does not
+    This endpoint does not call an LLM provider, so it does not
     consume an LLM request.
     """
 

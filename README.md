@@ -2,44 +2,38 @@
 
 ## What the project does
 
-This is a basic Knowledge Graph RAG application. It stores embedded text chunks in Neo4j, retrieves up to five relevant chunks, keeps conversations separate with conversation IDs, and displays grounded answers through Streamlit.
+Knowledge Graph RAG is a basic question-answering application that combines vector search with a knowledge graph.
 
-Users paste text, then ask questions about the stored information.
+Users add text to a conversation and ask questions about it. The application divides the text into chunks, creates embeddings, stores the data in Neo4j, extracts entities and relationships, and generates an answer supported by the stored information.
 
-## Assignment requirements
+The Streamlit interface displays the answer, relevant chunks, similarity scores, connected facts, and an interactive graph visualization.
 
-The project meets the main requirements by:
+## How it meets the project requirements
 
-1. Storing documents, chunks, and embeddings in Neo4j.
-2. Returning up to five relevant chunks with similarity scores.
-3. Filtering retrieval with `conversation_id` so conversations remain separate.
-4. Combining chunk evidence with connected graph facts to generate a grounded answer.
+1. Documents, chunks, and vector embeddings are stored in Neo4j.
+2. A question retrieves up to five relevant chunks and their similarity scores.
+3. Every operation is filtered by `conversation_id`, keeping conversations separate.
+4. Retrieved chunks and connected graph facts are combined to generate a grounded answer.
 
 ## Architecture
 
 ```text
 Text
-        |
-        v
-     Chunking
-        |
-        v
-    Embeddings
-        |
-        v
-      Neo4j
-        |
-        v
-Top-five vector retrieval
-        |
-        v
-Connected graph facts
-        |
-        v
-  Grounded answer
+  → cleaning and chunking
+  → sentence-transformer embeddings
+  → Neo4j vector and graph storage
+  → top-five vector retrieval
+  → connected entities and graph facts
+  → grounded LLM answer
 ```
 
-The graph connects conversations, documents, chunks, and entities using relationships such as `HAS_DOCUMENT`, `HAS_CHUNK`, `MENTIONS`, and `RELATED_TO`.
+The stored graph uses the following main structure:
+
+```text
+Conversation → Document → Chunk → Entity → Entity
+```
+
+Relationships include `HAS_DOCUMENT`, `HAS_CHUNK`, `NEXT_CHUNK`, `MENTIONS`, and `RELATED_TO`.
 
 ## Technologies used
 
@@ -47,11 +41,13 @@ The graph connects conversations, documents, chunks, and entities using relation
 - FastAPI
 - Streamlit
 - Neo4j AuraDB
-- Groq
-- OpenRouter
 - Sentence Transformers
+- Groq and OpenRouter
+- Pytest
 
 ## Installation
+
+Clone the repository and create a virtual environment:
 
 ```powershell
 git clone https://github.com/Aaditya-Tripathi/GraphRAG.git
@@ -59,21 +55,31 @@ cd GraphRAG
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+```
+
+Create the local environment file:
+
+```powershell
 Copy-Item .env.example .env
 ```
 
-Open `.env` and add your Neo4j AuraDB credentials. Add a Groq key,
-an OpenRouter key, or both. The provider can be selected in the UI.
-OpenRouter uses the free `openai/gpt-oss-20b:free` model.
-Then create the required Neo4j constraints and vector index:
+Open `.env` and enter your Neo4j AuraDB credentials. Add a Groq API key, an OpenRouter API key, or both. Never commit the completed `.env` file.
+
+Create the Neo4j constraints and vector index:
 
 ```powershell
 python -m scripts.setup_database
 ```
 
+The focused test suite can be run with:
+
+```powershell
+python -m pytest -q
+```
+
 ## Running the backend and UI
 
-Start FastAPI in the first terminal:
+Start the FastAPI backend in the first terminal:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -87,29 +93,24 @@ Start Streamlit in a second terminal:
 python -m streamlit run ui\streamlit_app.py
 ```
 
-Open:
+Open the Streamlit application at `http://localhost:8501`.
 
-- Streamlit: http://localhost:8501
-- API documentation: http://127.0.0.1:8000/docs
+FastAPI documentation is available at `http://127.0.0.1:8000/docs`.
 
 ## Basic usage
 
-1. Open the Streamlit interface.
-2. Use the generated conversation ID or enter your own.
-3. Enter a document title and paste the text to ingest.
-4. Click **Ingest information**.
-5. Open **Ask questions** and enter a question.
-6. Review the answer, supporting chunks, similarity scores, graph visualization, and connected facts.
+1. Start the backend and Streamlit interface.
+2. Keep the generated conversation ID or enter your own.
+3. Select Groq or OpenRouter as the language-model provider.
+4. Enter a document title and paste the source text.
+5. Select **Ingest information** to build the vector and knowledge graph data.
+6. Open **Ask questions** and enter a question about the stored text.
+7. Review the grounded answer, supporting chunks, similarity scores, graph facts, and interactive graph.
+8. Create a different conversation ID when you want an isolated collection of information.
 
-Example source text and questions are available in `sample_data/`.
-
-Run the focused tests with:
-
-```powershell
-python -m pytest -q
-```
+Example text and questions are provided in `sample_data/`.
 
 ## Limitations
 
-- File uploads are not currently supported; documents must be pasted as text.
-- Free-model availability and rate limits can vary by provider.
+- The current version accepts pasted text only; file uploads are not included.
+- Free LLM models can be slower or temporarily unavailable because of provider rate limits.

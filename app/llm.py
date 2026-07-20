@@ -1,7 +1,7 @@
 import json
 import math
 import time
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import httpx
 from groq import (
@@ -65,7 +65,7 @@ def normalize_provider(provider: str) -> LLMProvider:
             "provider must be groq or openrouter."
         )
 
-    return normalized  # type: ignore[return-value]
+    return cast(LLMProvider, normalized)
 
 
 def get_groq_client() -> Groq:
@@ -120,11 +120,6 @@ def create_groq_chat_completion(**kwargs):
             raise
 
     raise RuntimeError("Unreachable rate-limit retry state.")
-
-
-# Kept as a small compatibility alias for existing tests and callers.
-def create_chat_completion(**kwargs):
-    return create_groq_chat_completion(**kwargs)
 
 
 def wrap_groq_api_error(
@@ -350,7 +345,7 @@ def generate_text(
         return create_openrouter_completion(messages=messages)
 
     try:
-        completion = create_chat_completion(
+        completion = create_groq_chat_completion(
             model=GROQ_MODEL,
             messages=messages,
             temperature=0,
@@ -450,7 +445,7 @@ def generate_groq_json_fallback(
 
     for _ in range(STRUCTURED_FALLBACK_ATTEMPTS):
         try:
-            completion = create_chat_completion(
+            completion = create_groq_chat_completion(
                 model=GROQ_MODEL,
                 messages=messages,
                 temperature=0,
@@ -614,7 +609,7 @@ def generate_structured_data(
     ]
 
     try:
-        completion = create_chat_completion(
+        completion = create_groq_chat_completion(
             model=GROQ_MODEL,
             messages=messages,
             temperature=0,

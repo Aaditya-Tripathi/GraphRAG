@@ -38,9 +38,6 @@ dist/
 temp/
 tmp/
 
-# Uploaded/runtime files
-uploads/
-
 # Operating-system files
 .DS_Store
 Thumbs.db
