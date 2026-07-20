@@ -2,13 +2,10 @@ fastapi
 uvicorn[standard]
 streamlit
 neo4j
-neo4j-graphrag
-sentence-transformers
+neo4j-graphrag[sentence-transformers]
+sentence-transformers>=3,<4
 groq
 python-dotenv
-pydantic-settings
-python-multipart
-pypdf
-langchain-text-splitters
+pydantic
 httpx
 pytest

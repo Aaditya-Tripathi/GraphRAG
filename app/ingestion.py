@@ -1,35 +1,15 @@
-﻿import hashlib
 from uuid import uuid4
 
 from app.config import NEO4J_DATABASE
-from app.database import create_driver
+from app.constants import (
+    MAX_CONVERSATION_ID_LENGTH,
+    MAX_DOCUMENT_CHARACTERS,
+    MAX_DOCUMENT_TITLE_LENGTH,
+)
+from app.database import get_driver
 from app.embeddings import embed_texts
 from app.text_processing import clean_text, split_text
-
-
-def validate_required_text(
-    value: str,
-    field_name: str,
-) -> str:
-    """Validate and normalize a required string."""
-
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string.")
-
-    cleaned_value = value.strip()
-
-    if not cleaned_value:
-        raise ValueError(f"{field_name} is required.")
-
-    return cleaned_value
-
-
-def create_content_hash(text: str) -> str:
-    """Create a stable fingerprint for document content."""
-
-    return hashlib.sha256(
-        text.encode("utf-8")
-    ).hexdigest()
+from app.validation import validate_required_text
 
 
 def ingest_text(
@@ -45,11 +25,13 @@ def ingest_text(
     conversation_id = validate_required_text(
         conversation_id,
         "conversation_id",
+        max_length=MAX_CONVERSATION_ID_LENGTH,
     )
 
     document_title = validate_required_text(
         document_title,
         "document_title",
+        max_length=MAX_DOCUMENT_TITLE_LENGTH,
     )
 
     cleaned_text = clean_text(text)
@@ -57,6 +39,12 @@ def ingest_text(
     if not cleaned_text:
         raise ValueError(
             "The supplied document text is empty."
+        )
+
+    if len(cleaned_text) > MAX_DOCUMENT_CHARACTERS:
+        raise ValueError(
+            "Document text cannot exceed "
+            f"{MAX_DOCUMENT_CHARACTERS:,} characters."
         )
 
     chunks = split_text(cleaned_text)
@@ -69,8 +57,6 @@ def ingest_text(
         )
 
     document_id = str(uuid4())
-    content_hash = create_content_hash(cleaned_text)
-
     chunk_records: list[dict] = []
 
     for index, (chunk_text, embedding) in enumerate(
@@ -113,7 +99,6 @@ def ingest_text(
             conversation_id: $conversation_id,
             title: $document_title,
             source_type: 'text',
-            content_hash: $content_hash,
             character_count: $character_count,
             chunk_count: size($chunks),
             created_at: datetime()
@@ -122,7 +107,11 @@ def ingest_text(
 
     CREATE
         (conversation)
-        -[:HAS_DOCUMENT]->
+        -[:HAS_DOCUMENT {
+            conversation_id: $conversation_id,
+            document_id: $document_id,
+            created_at: datetime()
+        }]->
         (document)
 
     WITH document
@@ -143,7 +132,12 @@ def ingest_text(
 
     CREATE
         (document)
-        -[:HAS_CHUNK]->
+        -[:HAS_CHUNK {
+            conversation_id: $conversation_id,
+            document_id: $document_id,
+            chunk_id: chunk_data.id,
+            created_at: datetime()
+        }]->
         (chunk)
 
     WITH
@@ -171,39 +165,50 @@ def ingest_text(
         }
     )
 
-    MERGE
+    CREATE
         (current_chunk)
-        -[:NEXT_CHUNK]->
+        -[:NEXT_CHUNK {
+            conversation_id: $conversation_id,
+            source_chunk_id: pair.current_id,
+            target_chunk_id: pair.next_id,
+            created_at: datetime()
+        }]->
         (next_chunk)
 
     RETURN
         count(*) AS relationships_created
     """
 
-    with create_driver() as driver:
-        records, _, _ = driver.execute_query(
+    def store_document(transaction):
+        record = transaction.run(
             create_nodes_query,
             conversation_id=conversation_id,
             document_id=document_id,
             document_title=document_title,
-            content_hash=content_hash,
             character_count=len(cleaned_text),
             chunks=chunk_records,
-            database_=NEO4J_DATABASE,
-        )
+        ).single()
 
-        if not records:
+        if record is None:
             raise RuntimeError(
                 "Neo4j did not return an ingestion result."
             )
 
-        driver.execute_query(
-            create_sequence_query,
-            chunk_pairs=chunk_pairs,
-            database_=NEO4J_DATABASE,
-        )
+        if chunk_pairs:
+            transaction.run(
+                create_sequence_query,
+                conversation_id=conversation_id,
+                chunk_pairs=chunk_pairs,
+            ).consume()
 
-    database_result = records[0]
+        return record.data()
+
+    with get_driver().session(
+        database=NEO4J_DATABASE
+    ) as session:
+        database_result = session.execute_write(
+            store_document
+        )
 
     return {
         "conversation_id": conversation_id,
@@ -217,3 +222,79 @@ def ingest_text(
         "next_chunk_relationships": len(chunk_pairs),
         "embedding_dimension": len(embeddings[0]),
     }
+
+
+def delete_document(
+    conversation_id: str,
+    document_id: str,
+) -> None:
+    """Remove a newly ingested document after graph-build failure."""
+
+    conversation_id = validate_required_text(
+        conversation_id,
+        "conversation_id",
+        max_length=MAX_CONVERSATION_ID_LENGTH,
+    )
+    document_id = validate_required_text(
+        document_id,
+        "document_id",
+    )
+
+    queries = [
+        """
+        MATCH ()-[fact:RELATED_TO {
+            conversation_id: $conversation_id,
+            document_id: $document_id
+        }]->()
+        DELETE fact
+        """,
+        """
+        MATCH
+            (document:Document {
+                id: $document_id,
+                conversation_id: $conversation_id
+            })
+            -[:HAS_CHUNK]->
+            (chunk:Chunk)
+        DETACH DELETE chunk
+        """,
+        """
+        MATCH (document:Document {
+            id: $document_id,
+            conversation_id: $conversation_id
+        })
+        DETACH DELETE document
+        """,
+        """
+        MATCH (entity:Entity {
+            conversation_id: $conversation_id
+        })
+        WHERE
+            NOT EXISTS {
+                MATCH ()-[:MENTIONS]->(entity)
+            }
+            AND NOT EXISTS {
+                MATCH (entity)-[:RELATED_TO]-()
+            }
+        DETACH DELETE entity
+        """,
+        """
+        MATCH (conversation:Conversation {
+            id: $conversation_id
+        })
+        WHERE NOT EXISTS {
+            MATCH (conversation)-[:HAS_DOCUMENT]->()
+        }
+        DETACH DELETE conversation
+        """,
+    ]
+
+    driver = get_driver()
+
+    for query in queries:
+        driver.execute_query(
+            query,
+            conversation_id=conversation_id,
+            document_id=document_id,
+            database_=NEO4J_DATABASE,
+        )

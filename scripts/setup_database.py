@@ -1,12 +1,12 @@
-import re
-
-from neo4j.exceptions import ClientError
-
 from app.config import NEO4J_DATABASE
+from app.constants import (
+    EMBEDDING_DIMENSION,
+    VECTOR_INDEX_NAME,
+)
 from app.database import create_driver
 
 
-CONSTRAINT_QUERIES = [
+SCHEMA_QUERIES = [
     """
     CREATE CONSTRAINT conversation_id_unique IF NOT EXISTS
     FOR (conversation:Conversation)
@@ -23,11 +23,6 @@ CONSTRAINT_QUERIES = [
     REQUIRE chunk.id IS UNIQUE
     """,
     """
-    CREATE CONSTRAINT message_id_unique IF NOT EXISTS
-    FOR (message:Message)
-    REQUIRE message.id IS UNIQUE
-    """,
-    """
     CREATE CONSTRAINT entity_identity_unique IF NOT EXISTS
     FOR (entity:Entity)
     REQUIRE (
@@ -35,10 +30,6 @@ CONSTRAINT_QUERIES = [
         entity.normalized_name
     ) IS UNIQUE
     """,
-]
-
-
-RANGE_INDEX_QUERIES = [
     """
     CREATE INDEX chunk_conversation_id_index IF NOT EXISTS
     FOR (chunk:Chunk)
@@ -52,122 +43,40 @@ RANGE_INDEX_QUERIES = [
 ]
 
 
-FILTERABLE_VECTOR_INDEX_QUERY = """
-CREATE VECTOR INDEX chunk_embedding_index IF NOT EXISTS
+VECTOR_INDEX_QUERY = f"""
+CREATE VECTOR INDEX {VECTOR_INDEX_NAME} IF NOT EXISTS
 FOR (chunk:Chunk)
 ON (chunk.embedding)
-WITH [chunk.conversation_id]
-OPTIONS {
-    indexConfig: {
-        `vector.dimensions`: 384,
+OPTIONS {{
+    indexConfig: {{
+        `vector.dimensions`: {EMBEDDING_DIMENSION},
         `vector.similarity_function`: 'cosine'
-    }
-}
+    }}
+}}
 """
-
-
-BASIC_VECTOR_INDEX_QUERY = """
-CREATE VECTOR INDEX chunk_embedding_index IF NOT EXISTS
-FOR (chunk:Chunk)
-ON (chunk.embedding)
-OPTIONS {
-    indexConfig: {
-        `vector.dimensions`: 384,
-        `vector.similarity_function`: 'cosine'
-    }
-}
-"""
-
-
-def get_server_version(driver) -> str:
-    records, _, _ = driver.execute_query(
-        """
-        CALL dbms.components()
-        YIELD versions
-        RETURN versions[0] AS version
-        """,
-        database_=NEO4J_DATABASE,
-    )
-
-    if not records:
-        return "unknown"
-
-    return str(records[0]["version"])
-
-
-def supports_filterable_vector_index(version: str) -> bool:
-    match = re.match(r"(\d{4})\.(\d{1,2})", version)
-
-    if not match:
-        return False
-
-    year = int(match.group(1))
-    month = int(match.group(2))
-
-    return (year, month) >= (2026, 1)
-
-
-def run_query(driver, query: str) -> None:
-    driver.execute_query(
-        query,
-        database_=NEO4J_DATABASE,
-    )
 
 
 def setup_database() -> None:
+    """Create the Neo4j schema required by the application."""
+
     with create_driver() as driver:
-        version = get_server_version(driver)
-        print(f"Neo4j server version: {version}")
-
-        print("\nCreating constraints...")
-
-        for query in CONSTRAINT_QUERIES:
-            run_query(driver, query)
-
-        print("Constraints created.")
-
-        print("\nCreating normal indexes...")
-
-        for query in RANGE_INDEX_QUERIES:
-            run_query(driver, query)
-
-        print("Normal indexes created.")
-
-        print("\nCreating vector index...")
-
-        if supports_filterable_vector_index(version):
-            try:
-                run_query(
-                    driver,
-                    FILTERABLE_VECTOR_INDEX_QUERY,
-                )
-                print(
-                    "Created vector index with "
-                    "conversation filtering support."
-                )
-            except ClientError as error:
-                print(
-                    "Filterable vector index was unavailable. "
-                    "Using the compatible version instead."
-                )
-                print(f"Neo4j message: {error.message}")
-
-                run_query(
-                    driver,
-                    BASIC_VECTOR_INDEX_QUERY,
-                )
-        else:
-            run_query(
-                driver,
-                BASIC_VECTOR_INDEX_QUERY,
-            )
-            print(
-                "Created standard vector index. "
-                "Conversation filtering will be handled "
-                "by the retrieval code."
+        for query in SCHEMA_QUERIES:
+            driver.execute_query(
+                query,
+                database_=NEO4J_DATABASE,
             )
 
-        print("\nDatabase setup completed successfully.")
+        driver.execute_query(
+            VECTOR_INDEX_QUERY,
+            database_=NEO4J_DATABASE,
+        )
+        driver.execute_query(
+            "CALL db.awaitIndex($index_name, 60)",
+            index_name=VECTOR_INDEX_NAME,
+            database_=NEO4J_DATABASE,
+        )
+
+    print("Neo4j constraints and indexes are ready.")
 
 
 if __name__ == "__main__":

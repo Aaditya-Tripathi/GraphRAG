@@ -4,29 +4,16 @@ import neo4j
 from neo4j_graphrag.retrievers import VectorRetriever
 from neo4j_graphrag.types import RetrieverResultItem
 
-from app.config import (
-    NEO4J_DATABASE,
+from app.config import NEO4J_DATABASE
+from app.constants import (
+    MAX_CONVERSATION_ID_LENGTH,
+    MAX_QUESTION_LENGTH,
+    MAX_TOP_K,
     VECTOR_INDEX_NAME,
 )
-from app.database import create_driver
+from app.database import get_driver
 from app.embeddings import get_embedder
-
-
-def validate_required_text(
-    value: str,
-    field_name: str,
-) -> str:
-    """Validate a required text value."""
-
-    if not isinstance(value, str):
-        raise TypeError(f"{field_name} must be a string.")
-
-    cleaned_value = value.strip()
-
-    if not cleaned_value:
-        raise ValueError(f"{field_name} is required.")
-
-    return cleaned_value
+from app.validation import validate_required_text
 
 
 def format_vector_result(
@@ -66,39 +53,40 @@ def retrieve_chunks(
     conversation_id = validate_required_text(
         conversation_id,
         "conversation_id",
+        max_length=MAX_CONVERSATION_ID_LENGTH,
     )
 
     question = validate_required_text(
         question,
         "question",
+        max_length=MAX_QUESTION_LENGTH,
     )
 
     if not isinstance(top_k, int):
         raise TypeError("top_k must be an integer.")
 
-    if top_k < 1 or top_k > 20:
+    if top_k < 1 or top_k > MAX_TOP_K:
         raise ValueError(
-            "top_k must be between 1 and 20."
+            f"top_k must be between 1 and {MAX_TOP_K}."
         )
 
-    with create_driver() as driver:
-        retriever = VectorRetriever(
-            driver=driver,
-            index_name=VECTOR_INDEX_NAME,
-            embedder=get_embedder(),
-            result_formatter=format_vector_result,
-            neo4j_database=NEO4J_DATABASE,
-        )
+    retriever = VectorRetriever(
+        driver=get_driver(),
+        index_name=VECTOR_INDEX_NAME,
+        embedder=get_embedder(),
+        result_formatter=format_vector_result,
+        neo4j_database=NEO4J_DATABASE,
+    )
 
-        search_result = retriever.search(
-            query_text=question,
-            top_k=top_k,
-            filters={
-                "conversation_id": {
-                    "$eq": conversation_id,
-                }
-            },
-        )
+    search_result = retriever.search(
+        query_text=question,
+        top_k=top_k,
+        filters={
+            "conversation_id": {
+                "$eq": conversation_id,
+            }
+        },
+    )
 
     results: list[dict] = []
 

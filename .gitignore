@@ -1,6 +1,47 @@
+# Secrets and local configuration
 .env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Python virtual environments
 .venv/
+venv/
+env/
+
+# Python-generated files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Test and coverage output
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Editors
 .vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Uploaded/runtime files
+uploads/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+desktop.ini

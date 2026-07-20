@@ -1,12 +1,18 @@
-﻿from neo4j_graphrag.embeddings import SentenceTransformerEmbeddings
+import logging
+from threading import Lock
 
-from app.config import (
+from neo4j_graphrag.embeddings import SentenceTransformerEmbeddings
+
+from app.constants import (
     EMBEDDING_DIMENSION,
     EMBEDDING_MODEL,
 )
 
 
 _embedder: SentenceTransformerEmbeddings | None = None
+_embedder_lock = Lock()
+
+logger = logging.getLogger(__name__)
 
 
 def get_embedder() -> SentenceTransformerEmbeddings:
@@ -15,11 +21,16 @@ def get_embedder() -> SentenceTransformerEmbeddings:
     global _embedder
 
     if _embedder is None:
-        print(f"Loading embedding model: {EMBEDDING_MODEL}")
+        with _embedder_lock:
+            if _embedder is None:
+                logger.info(
+                    "Loading embedding model: %s",
+                    EMBEDDING_MODEL,
+                )
 
-        _embedder = SentenceTransformerEmbeddings(
-            model=EMBEDDING_MODEL,
-        )
+                _embedder = SentenceTransformerEmbeddings(
+                    model=EMBEDDING_MODEL,
+                )
 
     return _embedder
 
